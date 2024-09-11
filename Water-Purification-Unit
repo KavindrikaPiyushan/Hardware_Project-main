@@ -1,0 +1,572 @@
+#include <OneWire.h>//For temp sensor
+#include <DallasTemperature.h>//For temp sensor
+#include <LiquidCrystal_I2C.h>
+
+// set the LCD number of columns and rows
+int lcdColumns = 16;
+int lcdRows = 2;
+
+// set LCD address, number of columns and rows
+// if you don't know your display address, run an I2C scanner sketch
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);
+
+int Liquid_level=0; //variable for liquid level sensor
+int Flag2 = 0;// to recognize first time
+
+//For temperature sensor
+const int oneWireBus = 4;  // GPIO where the DS18B20 is connected to (D12)
+
+OneWire oneWire(oneWireBus);   // Setup a oneWire instance to communicate with any OneWire devices
+
+DallasTemperature sensors(&oneWire);// Pass our oneWire reference to Dallas Temperature sensor 
+
+//motors & fan
+//#define MOTORUP D9
+//#define MOTOROUT D7
+//#define MOTORIN D6
+//#define FAN D5
+
+//For ph sensor
+#define Ph_SensorPin A0            //pH meter Analog output to Arduino Analog Input 0
+#define Offset -17.21           //deviation compensate
+#define ArrayLenth  40    //times of collection
+int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
+int pHArrayIndex=0;
+
+int Flag2=0;// flag2 is use to recognize first time
+
+void setup() {
+  Serial.begin(115200);//Set baud rate
+  pinMode(Ph_SensorPin,INPUT); //Set A0 as input for ph
+  pinMode(oneWireBus,INPUT); //Set D12 as input for temp
+  pinMode(16,INPUT); //Set D10 as input for liquid lvl sensor
+  pinMode(A1,INPUT); //Set A1 as input for turbidity
+
+//Set all 3.3v to 5v converter pin
+  pinMode(3,OUTPUT); //cooling fan
+  pinMode(1,OUTPUT);
+  pinMode(25,OUTPUT);//base pump
+  pinMode(26,OUTPUT);//Acid pump
+  pinMode(0,OUTPUT);
+  pinMode(13,OUTPUT);//Motorup
+  pinMode(14,OUTPUT);
+  pinMode(2,OUTPUT);
+
+//Set all 3.3v to 5v converter pin low 
+  digitalWrite(3,HIGH);
+      digitalWrite(1,HIGH);
+      digitalWrite(25,HIGH);
+      digitalWrite(26,HIGH);
+      digitalWrite(0,HIGH);
+      digitalWrite(14,HIGH);
+      digitalWrite(13,HIGH);
+      digitalWrite(2,HIGH);
+  //pinMode(MOTORUP, OUTPUT);//set D9 as output for motorup
+  //pinMode(MOTOROUT, OUTPUT);//set D7 as output for motordown
+  //pinMode(MOTORIN, OUTPUT);//set D6 as output for motorin
+  //pinMode(FAN, OUTPUT);//set D5 as output for motorin
+  sensors.begin();// Start the DS18B20 sensor
+  // initialize LCD
+  lcd.init();
+  // turn on LCD backlight                      
+  lcd.backlight();
+  
+  lcd.setCursor(0, 0);
+  lcd.print("Welcome!");
+
+  delay(1000);
+  lcd.clear();
+  
+  
+}
+
+void loop() {
+  top:
+  Liquid_level=digitalRead(16);
+  //Serial.print("Liquid_level= ");
+  //Serial.println(Liquid_level,DEC);
+  if(Liquid_level=0){
+    lcd.setCursor(0, 0);
+    lcd.print("Liquid_level= ");
+    lcd.print(Liquid_level);
+    lcd.setCursor(0, 1);
+    lcd.print("Tank not full");
+    delay(1000);
+    lcd.clear();
+  }else{
+    lcd.setCursor(0, 0);
+    lcd.print("Liquid_level= ");
+    lcd.print(Liquid_level);
+    lcd.setCursor(0, 1);
+    lcd.print("Tank full");
+    delay(1000);
+    lcd.clear();
+  }
+
+  if(Liquid_level){
+    loop_top:
+    //Add a delay To get sensor values 
+    for(int i=10;i>0;i--){
+      lcd.setCursor(0, 0);
+      lcd.print("Please Wait...");
+      lcd.setCursor(2, 1);
+      lcd.print(i);
+      delay(1000);
+      lcd.clear();
+    }
+
+    //Checking Temperature
+    //countdown for temperature sensor to get temperature
+    for(int i=100;i>0;i--){
+        lcd.setCursor(0, 0);
+        lcd.print("Please Wait...");
+        lcd.setCursor(2, 1);
+        lcd.print(i);
+        delay(1000);
+        lcd.clear();
+      }
+
+    sensors.requestTemperatures(); 
+    float temperatureC = sensors.getTempCByIndex(0);
+    if(temperatureC == -127.00){
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Temp failed");
+      lcd.setCursor(0, 1);
+      lcd.print("Repair the unit");
+      delay(4000);
+      lcd.clear();
+      goto loop_top;
+
+    }else{
+
+      lcd.setCursor(0, 0);
+      lcd.print("Temp: ");
+      lcd.print(temperatureC);
+      lcd.print(" C");
+      delay(3000);
+      lcd.clear();
+
+      // Serial.print("Temperature Celsius:: ");
+      // Serial.print(temperatureC);
+      // Serial.println("ºC       ");
+      if(temperatureC>=40){
+          lcd.setCursor(0, 0);
+          lcd.print("Fan on");
+
+          digitalWrite(3,LOW);
+          
+
+          while(temperatureC>=40){
+          //Serial.println("Fan on");
+          delay(5000);
+          
+
+          sensors.requestTemperatures(); 
+          temperatureC = sensors.getTempCByIndex(0);
+
+          if(temperatureC == -127.00){
+            //Serial.println("Failed to read from DS18B20 sensor");
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Temp failed");
+            lcd.setCursor(0, 1);
+            lcd.print("Repair the unit");
+            delay(4000);
+            lcd.clear();
+            goto loop_top;
+
+          }else{
+            // Serial.print("Temperature Celsius:: ");
+            // Serial.print(temperatureC);
+            // Serial.println("ºC       ");
+            lcd.setCursor(0, 1);
+            lcd.print("Temp: ");
+            lcd.print(temperatureC);
+            lcd.print(" C");
+            delay(3000);
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Fan on");
+          }
+      }
+      //Serial.println("Fan off");
+      digitalWrite(3,HIGH);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Fan off");
+      delay(1000);
+      lcd.clear();
+      goto loop_top;
+      }
+    }
+    delay(500);
+
+
+    //Check Turbidity
+    //get 40 input values to reduce error
+    for(int i=0; i<40; i++){
+      int tur_sensorValue = analogRead(A1);// read the input on analog pin A1:
+      Turbidity_voltage += tur_sensorValue * (5.0 / 4095.0);// Convert the analog reading (which goes from 0 - 4095) to a voltage (0 - 5V):
+    }
+    Turbidity_voltage=Turbidity_voltage/40;
+
+    if(Turbidity_voltage<=4){
+      Turbidity_voltage=4;
+    }else if(Turbidity_voltage>4.8){
+      Turbidity_voltage=4.8;
+    }
+
+    Turbidity_voltage=111.11*Turbidity_voltage-433.33;  //this equation will different for same model of sensor. therefore you have to calculate this equation with doing practical experiments
+    //Serial.print("Turbidity value= ");
+    //Serial.println(Turbidity_voltage); // print out the value you read:
+    lcd.setCursor(0, 0);
+    lcd.print("Turbidity ");
+    lcd.print(Turbidity_voltage);//this will give 0-100 % value
+    lcd.print("%");
+    delay(1000);
+    // lcd.clear();
+
+    if(Turbidity_voltage<50){
+      //Serial.println("Motorup on");
+    
+      lcd.setCursor(0, 1);
+      lcd.print("Motorup on");
+
+      digitalWrite(13,LOW);
+      delay(60000);
+      // delay(5000);
+      digitalWrite(13,HIGH);
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Motorup off");
+      delay(1000);
+      lcd.clear();
+
+      //Serial.println("Motorup off");
+      
+      goto top;
+    }
+    delay(500);
+
+    
+
+    //Checking Ph Value
+    //get 40 values to reduce error
+    for(int i=0;i<40;i++){
+      pHArray[pHArrayIndex++]=analogRead(Ph_SensorPin);
+      if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
+    }
+    float voltage = avergearray(pHArray, ArrayLenth);
+    float pHValue = 0.0106*voltage+Offset;
+    //Serial.print("Voltage:");
+    //Serial.print(voltage,2);
+    //Serial.print("pH value: ");
+    //Serial.println(pHValue,2);
+    lcd.setCursor(0, 0);
+      lcd.print("PH value ");
+      lcd.print(PH_value);//thi will give 0-14 value
+      delay(1000);
+    delay(500);
+
+      
+    //Treatment for ph
+    
+      if(PH_value>9){
+
+          if(pHValue<=10 && pHValue>9) {
+          digitalWrite(26,LOW);
+          lcd.setCursor(0, 1);
+          lcd.print("Acid pump on");
+          //Serial.println("Acid pump on");
+          delay(5000);
+          digitalWrite(26,HIGH);
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Acid pump off");
+          delay(1000);
+          lcd.clear();
+          //Serial.println("Acid pump off");
+        }
+
+        else if(pHValue<=11 && pHValue>10) {
+          digitalWrite(26,LOW);
+          //Serial.println("Acid pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Acid pump on");
+          delay(18000);
+          digitalWrite(26,HIGH);
+
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Acid pump off");
+          delay(1000);
+          lcd.clear();
+          //Serial.println("Acid pump off");
+        }
+        else if(pHValue<=12 && pHValue>11) {
+          digitalWrite(26,LOW);
+          //Serial.println("Acid pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Acid pump on");
+          delay(180000);
+          digitalWrite(26,HIGH);
+
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Acid pump off");
+          delay(1000);
+          lcd.clear();
+          //Serial.println("Acid pump off");
+        }
+        else if(pHValue<=13 && pHValue>12) {
+          digitalWrite(26,LOW);
+          //Serial.println("Acid pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Acid pump on");
+          delay(1800000);
+          digitalWrite(26,HIGH);
+
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Acid pump off");
+          delay(1000);
+          lcd.clear();
+          //Serial.println("Acid pump off");
+        }
+        else if(pHValue<=14 && pHValue>13) {
+          digitalWrite(26,LOW);
+          //Serial.println("Acid pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Acid pump on");
+          delay(18000000);
+          digitalWrite(26,HIGH);
+          //Serial.println("Acid pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Acid pump off");
+          delay(1000);
+          lcd.clear();
+        }
+
+        //mixing motor on
+        digitalWrite(2,LOW);
+        //Serial.println("Mixing motor on");
+        lcd.setCursor(0, 0);
+          lcd.print("Mixing motor on");
+        delay(15000);
+        // delay(5000);
+        //Serial.println("Mixing motor off");
+        
+        digitalWrite(2,HIGH);
+        lcd.setCursor(0, 1);
+          lcd.print("Mixing motor off");
+          delay(1000);
+          lcd.clear();
+        goto loop_top;
+
+      }
+      else if(PH_value<6){
+          if(pHValue<6 && pHValue>=5) {
+            //Serial.println("Base pump on");
+            lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(5000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+        else if(pHValue<5 && pHValue>=4) {
+          //Serial.println("Base pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(18000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+        else if(pHValue<4 && pHValue>=3) {
+          //Serial.println("Base pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(180000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+        else if(pHValue<3 && pHValue>=2) {
+          //Serial.println("Base pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(1800000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+        else if(pHValue<2 && pHValue>=1) {
+          //Serial.println("Base pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(18000000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+        else if(pHValue<1 && pHValue>=0) {
+          
+          //Serial.println("Base pump on");
+          lcd.setCursor(0, 1);
+          lcd.print("Base pump on");
+          digitalWrite(25,LOW);
+          delay(180000000);
+          digitalWrite(25,HIGH);
+          //Serial.println("Base pump off");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Base pump off");
+          delay(1000);
+          lcd.clear();
+        }
+
+        //Mixing motor on
+        digitalWrite(2,LOW);
+        //Serial.println("Mixing motor on");
+        lcd.setCursor(0, 0);
+          lcd.print("Mixing motor on");
+        delay(15000);
+        //Serial.println("Mixing motor off");
+        
+        digitalWrite(2,HIGH);
+        lcd.setCursor(0, 1);
+          lcd.print("Mixing motor off");
+          delay(1000);
+          lcd.clear();
+        goto loop_top;
+      }
+    
+        
+      
+
+    
+      //Serial.println("Motorout on");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+          lcd.print("Motorout on");
+      digitalWrite(14,LOW);
+      delay(75000);
+      //delay(5000);
+      digitalWrite(14,HIGH);
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Motorout off");
+          lcd.setCursor(0, 1);
+          lcd.print("Motorin on");
+          delay(1000);
+      //Serial.println("Motorout off");
+      //Serial.println("Motorin on");
+      digitalWrite(0,LOW);
+      delay(70000);
+      // while(!Liquid_level){
+      //  Liquid_level=digitalRead(16);
+      // }
+      
+      digitalWrite(0,HIGH);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Motorin off");
+      delay(1000);
+      lcd.clear();
+      Flag4=0;
+      Flag2=1;
+      //Serial.println("Motorin off");
+    
+  }
+
+  if(Flag2 == 0){// this condition satisfy only first time if water is not full in a tank
+    //Serial.println("Motorin on");
+    lcd.setCursor(0, 0);
+          lcd.print("Motorin on");
+          delay(1000);
+    digitalWrite(0,LOW);
+    //delay(25000);
+    while(!Liquid_level){
+      Liquid_level=digitalRead(16);
+    }
+    digitalWrite(0,HIGH);
+    lcd.setCursor(0, 1);
+          lcd.print("Motorin off");
+          delay(1000);
+          lcd.clear();
+
+    //Serial.println("Motorin off");
+    Flag2 = 1;
+  }
+}
+
+//Returns the Ph & voltage value
+double avergearray(int* arr, int number){
+  int i;
+  int max,min;
+  double avg;
+  long amount=0;
+  if(number<=0){
+    Serial.println("Error number for the array to avraging!/n");
+    return 0;
+  }
+  if(number<5){   //less than 5, calculated directly statistics
+    for(i=0;i<number;i++){
+      amount+=arr[i];
+    }
+    avg = amount/number;
+    return avg;
+  }else{
+    if(arr[0]<arr[1]){
+      min = arr[0];max=arr[1];
+    }
+    else{
+      min=arr[1];max=arr[0];
+    }
+    for(i=2;i<number;i++){
+      if(arr[i]<min){
+        amount+=min;        //arr<min
+        min=arr[i];
+      }else {
+        if(arr[i]>max){
+          amount+=max;    //arr>max
+          max=arr[i];
+        }else{
+          amount+=arr[i]; //min<=arr<=max
+        }
+      }//if
+    }//for
+    avg = (double)amount/(number-2);
+  }//if
+  return avg;
+}
